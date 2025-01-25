@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SDK Test with History</title>
+    <style>
+        html, body {
+            height: 100%;
+        }
+
+        #scrollable-conversation {
+            background-color: #000;
+            color: #0F0;
+            text-shadow: 0 0 10px #0F0;
+            font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 16px;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 80%;
+            margin: 0 2em;
+        }
+
+        .scroll-box {
+            flex-grow: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .scroll-box-middle {
+            width: 45.25em;
+            overflow-y: auto;
+            margin-left: 0.5em;
+            border: 2px solid white;
+            padding: 15px;
+        }
+
+        #conversation-inner>pre {
+            white-space: pre-wrap;
+            white-space: -moz-pre-wrap;
+            white-space: -o-pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .scroll-box::-webkit-scrollbar {
+            display: none;
+        }
+
+        .green { color: #0F0; text-shadow: 0 0 10px #0F0; }
+        .white { color: #FFF; text-shadow: 0 0 10px #FFF; }
+        .gray { color: #888; text-shadow: 0 0 10px #888; }
+        .red { color: #F00; text-shadow: 0 0 10px #F00; }
+        .role {
+            color: #D55;
+            white-space: nowrap;
+            text-shadow: 0 0 10px #D55;
+        }
+    </style>
+</head>
+<body>
+    <button id="callButton">Call</button>
+    <button id="hangUpButton" disabled>Hang Up</button>
+    <div>Status: <span id="statusText">Not connected</span></div>
+
+    <div class="container">
+        <div class="scroll-box" id="conversation">
+            <div class="scroll-box-middle" id="scrollable-conversation">
+                <div id="conversation-inner">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://backend.funtimewithaisolutions.com/sdk/history.js"></script>
+    <script src="https://backend.funtimewithaisolutions.com/sdk/audio.js"></script>
+    <script src="https://backend.funtimewithaisolutions.com/sdk/sdk.js"></script>
+    <script>
+        const BACKEND_URL = 'https://backend.funtimewithaisolutions.com';
+        const FIREBASE_KEY = "AIzaSyCWTgYvZ7TnYQiVdvJNDysBrzjNojxj2_s";
+        const PARTNER = "app1";
+        const CHARACTER = "girl1";
+
+        const callButton = document.getElementById('callButton');
+        const hangUpButton = document.getElementById('hangUpButton');
+        const statusText = document.getElementById('statusText');
+
+        // Define UI state management callbacks
+        const callbacks = {
+            onCallStart: () => {
+                callButton.disabled = true;
+                hangUpButton.disabled = false;
+            },
+            onCallError: () => {
+                callButton.disabled = false;
+                hangUpButton.disabled = true;
+            },
+            onHangUp: () => {
+                callButton.disabled = false;
+                hangUpButton.disabled = true;
+            },
+            onStatusUpdate: (status) => {
+                statusText.textContent = status;
+            }
+        };
+
+        const callManager = new CallManager(callbacks);
+
+        callButton.addEventListener('click', () => {
+            callManager.handleCall(FIREBASE_KEY, PARTNER, CHARACTER);
+        });
+
+        hangUpButton.addEventListener('click', () => {
+            callManager.hangUp();
+        });
+    </script>
+</body>
+</html>

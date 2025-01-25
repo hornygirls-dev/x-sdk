@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SDK Test</title>
+</head>
+<body>
+    <button id="callButton">Call</button>
+    <button id="hangUpButton" disabled>Hang Up</button>
+    <div>Status: <span id="statusText">Not connected</span></div>
+
+    <script src="https://backend.funtimewithaisolutions.com/sdk/audio.js"></script>
+    <script src="https://backend.funtimewithaisolutions.com/sdk/sdk.js"></script>
+    <script>
+        const BACKEND_URL = 'https://backend.funtimewithaisolutions.com';
+        const FIREBASE_KEY = "AIzaSyCWTgYvZ7TnYQiVdvJNDysBrzjNojxj2_s";
+        const PARTNER = "app1";
+        const CHARACTER = "girl1";
+
+        const callButton = document.getElementById('callButton');
+        const hangUpButton = document.getElementById('hangUpButton');
+        const statusText = document.getElementById('statusText');
+
+        // Define UI state management callbacks
+        const callbacks = {
+            onCallStart: () => {
+                callButton.disabled = true;
+                hangUpButton.disabled = false;
+            },
+            onCallError: () => {
+                callButton.disabled = false;
+                hangUpButton.disabled = true;
+            },
+            onHangUp: () => {
+                callButton.disabled = false;
+                hangUpButton.disabled = true;
+            },
+            onStatusUpdate: (status) => {
+                statusText.textContent = status;
+            }
+        };
+
+        const callManager = new CallManager(callbacks);
+
+        callButton.addEventListener('click', () => {
+            callManager.handleCall(FIREBASE_KEY, PARTNER, CHARACTER);
+        });
+
+        hangUpButton.addEventListener('click', () => {
+            callManager.hangUp();
+        });
+    </script>
+</body>
+</html>

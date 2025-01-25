@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SDK Test with BlackHole</title>
+</head>
+<body>
+<button id="callButton">Call</button>
+<button id="hangUpButton" disabled>Hang Up</button>
+<div>Status: <span id="statusText">Not connected</span></div>
+
+<!-- Импортируем скрипты напрямую с CDN -->
+<script src="https://backend.funtimewithaisolutions.com/sdk/audio.js"></script>
+<script src="https://backend.funtimewithaisolutions.com/sdk/sdk.js"></script>
+
+<!-- Локальный скрипт с нашей логикой -->
+<script>
+    const BACKEND_URL = 'https://backend.funtimewithaisolutions.com';
+    const FIREBASE_KEY = "AIzaSyCWTgYvZ7TnYQiVdvJNDysBrzjNojxj2_s";
+    const PARTNER = "app1";
+    const CHARACTER = "girl1";
+
+    // Расширяем AudioClient для работы с BlackHole
+    class BlackHoleAudioClient extends AudioClient {
+        async setupAudio() {
+            try {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log("Created AudioContext");
+
+                // Получаем все аудио устройства
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                console.log("All audio devices:", devices);
+
+                // Ищем BlackHole среди input устройств
+                const blackholeInput = devices.find(d =>
+                    d.kind === 'audioinput' && d.label.includes('BlackHole 2ch')
+                );
+
+                // Ищем BlackHole среди output устройств
+                const blackholeOutput = devices.find(d =>
+                    d.kind === 'audiooutput' && d.label.includes('BlackHole 2ch')
+                );
+
+                if (!blackholeInput || !blackholeOutput) {
+                    throw new Error('BlackHole devices not found');
+                }
+
+                console.log("Found BlackHole input:", blackholeInput);
+                console.log("Found BlackHole output:", blackholeOutput);
+
+                // Получаем поток из BlackHole input
+                this.stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: {exact: blackholeInput.deviceId},
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+                console.log("Got stream from BlackHole");
+
+                // Настраиваем AudioWorklet
+                const blob = new Blob([workletCode], {type: "application/javascript"});
+                const blobURL = URL.createObjectURL(blob);
+
+                await this.audioContext.audioWorklet.addModule(blobURL);
+                console.log("AudioWorklet loaded");
+
+                this.audioNode = new AudioWorkletNode(this.audioContext, "capture-and-playback-processor");
+
+                // Подключаем аудио граф
+                const source = this.audioContext.createMediaStreamSource(this.stream);
+                source.connect(this.audioNode);
+
+                // Создаем элемент audio для вывода в BlackHole
+                const audioElement = new Audio();
+                audioElement.srcObject = new MediaStream([this.audioContext.createMediaStreamDestination().stream.getAudioTracks()[0]]);
+
+                // Направляем выход в BlackHole через audio элемент
+                try {
+                    await audioElement.setSinkId(blackholeOutput.deviceId);
+                    console.log("Set output to BlackHole");
+                } catch (e) {
+                    console.log("Failed to set output device, falling back to default:", e);
+                }
+
+                this.audioNode.connect(this.audioContext.destination);
+
+                // Добавляем логирование в обработчик сообщений
+                this.audioNode.port.onmessage = (e) => {
+                    const data = e.data;
+                    if (Array.isArray(data)) {
+                        const [eventType, audioData] = data;
+                        if (audioData && audioData.length > 0) {
+                            console.log(`Audio event: ${eventType}, data size: ${audioData.length}`);
+
+                            if (eventType === "capture" && this.ws?.readyState === WebSocket.OPEN) {
+                                console.log("Sending audio to WebSocket:", audioData.length);
+                                this.ws.send(audioData);
+                            }
+                        }
+                    }
+                };
+
+                console.log("Audio setup complete");
+                URL.revokeObjectURL(blobURL);
+
+            } catch (error) {
+                console.error("Error in setupAudio:", error);
+                throw error;
+            }
+        }
+    }
+
+    // Расширяем CallManager для использования BlackHoleAudioClient
+    class BlackHoleCallManager extends CallManager {
+        async handleCall(key, partner, character) {
+            this.callbacks.onCallStart();
+            try {
+                const currentToken = await getFirebaseTokenAnonymous(key);
+                const {endpoint, callId} = await initiateCall(
+                    currentToken,
+                    this.callbacks.onStatusUpdate,
+                    partner,
+                    character
+                );
+
+                const connectionUrl = new URL(endpoint);
+                connectionUrl.pathname = `${connectionUrl.pathname}${callId}/1`;
+                connectionUrl.searchParams.append('token', currentToken);
+
+                // Используем BlackHoleAudioClient вместо обычного
+                this.client = new BlackHoleAudioClient(connectionUrl.href, {
+                    onStatusUpdate: this.callbacks.onStatusUpdate,
+                    onConnected: () => console.log("Connected!"),
+                    onDisconnected: () => this.callbacks.onCallError()
+                });
+
+                await this.client.startAudio();
+            } catch (error) {
+                console.error("Call failed:", error);
+                this.callbacks.onCallError();
+            }
+        }
+    }
+
+    const callbacks = {
+        onCallStart: () => {
+            callButton.disabled = true;
+            hangUpButton.disabled = false;
+        },
+        onCallError: () => {
+            callButton.disabled = false;
+            hangUpButton.disabled = true;
+        },
+        onHangUp: () => {
+            callButton.disabled = false;
+            hangUpButton.disabled = true;
+        },
+        onStatusUpdate: (status) => {
+            statusText.textContent = status;
+            console.log("Status:", status);
+        }
+    };
+
+    const callManager = new BlackHoleCallManager(callbacks);
+
+    callButton.addEventListener('click', () => {
+        callManager.handleCall(FIREBASE_KEY, PARTNER, CHARACTER);
+    });
+
+    hangUpButton.addEventListener('click', () => {
+        callManager.hangUp();
+    });
+</script>
+</body>
+</html>
